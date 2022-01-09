@@ -1,5 +1,7 @@
+#include "sensors.h"
+
 #include <logging/log.h>
-LOG_MODULE_REGISTER(zephyr_esp32_mqtt_demo, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 #include <zephyr.h>
 #include <zephyr/types.h>
@@ -211,7 +213,7 @@ struct sensors_data
   const char *pms10;
   const char *temperature;
   const char *humidity;
-} ;
+};
 
 struct node_data
 {
@@ -441,8 +443,15 @@ void main(void)
 
   app_mqtt_subscribe(&client_ctx);
 
+  initSensors();
+
   while(1) {
     app_mqtt_process_mqtt(&client_ctx);
+
+    struct sensorsData data;
+    if (getSensorsData(&data)) {
+      LOG_INF("Temperature: %u", data.temperature);
+    }
 
     app_mqtt_publish(&client_ctx, MQTT_QOS_0_AT_MOST_ONCE);
 
