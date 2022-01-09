@@ -2,6 +2,8 @@
 LOG_MODULE_REGISTER(zephyr_esp32_mqtt_demo, LOG_LEVEL_INF);
 
 #include <zephyr.h>
+#include <zephyr/types.h>
+#include <data/json.h>
 #include <net/socket.h>
 #include <net/mqtt.h>
 #include <random/rand32.h>
@@ -34,8 +36,8 @@ K_SEM_DEFINE(netif_ready, 0, 1);
 
 #define MQTT_POLL_MSEC	500
 #define MQTT_ESP32_BROKER_IP "192.168.1.4"
-#define MQTT_ESP32_DEMO_PUB_TOPIC "esp32/pub"
-#define MQTT_ESP32_DEMO_SUB_TOPIC "esp32/sub"
+#define MQTT_ESP32_DEMO_PUB_TOPIC "nodes/outside/data"
+#define MQTT_ESP32_DEMO_SUB_TOPIC "nodes/outside/set"
 #define MQTT_ESP32_DEMO_USER "ongkdrvv"
 #define MQTT_ESP32_DEMO_PWD "HBYF91mehJcP"
 
@@ -200,6 +202,59 @@ static void app_mqtt_subscribe(struct mqtt_client *client) {
   }
 }
 
+static char buffer[1024];
+
+struct sensors_data
+{
+  const char *pms1_0;
+  const char *pms2_5;
+  const char *pms10;
+  const char *temperature;
+  const char *humidity;
+} ;
+
+struct node_data
+{
+  const char *location;
+  const char *timestamp;
+  const struct sensors_data sensors;
+};
+
+static const struct json_obj_descr node_data_sensor_descriptor[] = {
+  JSON_OBJ_DESCR_PRIM(struct sensors_data, pms1_0, JSON_TOK_STRING),
+  JSON_OBJ_DESCR_PRIM(struct sensors_data, pms2_5, JSON_TOK_STRING),
+  JSON_OBJ_DESCR_PRIM(struct sensors_data, pms10, JSON_TOK_STRING),
+  JSON_OBJ_DESCR_PRIM(struct sensors_data, temperature, JSON_TOK_STRING),
+  JSON_OBJ_DESCR_PRIM(struct sensors_data, humidity, JSON_TOK_STRING),
+};
+
+static const struct json_obj_descr node_data_descriptor[] = {
+  JSON_OBJ_DESCR_PRIM(struct node_data, location, JSON_TOK_STRING),
+  JSON_OBJ_DESCR_PRIM(struct node_data, timestamp, JSON_TOK_STRING),
+  JSON_OBJ_DESCR_OBJECT(struct node_data, sensors, node_data_sensor_descriptor),
+};
+
+char * encode_node_data(struct node_data response)
+{
+  int ret;
+  ssize_t len;
+
+  len = json_calc_encoded_len(node_data_descriptor, ARRAY_SIZE(node_data_descriptor), &response);
+
+  ret = json_obj_encode_buf(
+    node_data_descriptor,
+    ARRAY_SIZE(node_data_descriptor),
+    &response,
+    buffer,
+    sizeof(buffer));
+
+  // LOG_INF("Encode Return Value: %d", ret);
+
+  // TODO: handle error
+
+  return buffer;
+}
+
 static int app_mqtt_publish(struct mqtt_client *client, enum mqtt_qos qos)
 {
   struct mqtt_publish_param param;
@@ -208,15 +263,31 @@ static int app_mqtt_publish(struct mqtt_client *client, enum mqtt_qos qos)
   param.message.topic.topic.utf8 = (uint8_t *)MQTT_ESP32_DEMO_PUB_TOPIC;
   param.message.topic.topic.size =
       strlen(param.message.topic.topic.utf8);
-  param.message.payload.data = CONFIG_BOARD;
+
+  struct node_data data = {
+    .location = "office",
+    .timestamp = "2021-12-18T20:25:46.537Z",
+    .sensors = {
+      .pms1_0 = "25",
+      .pms2_5 = "25",
+      .pms10 = "25",
+      .temperature = "21",
+      .humidity = "43",
+    }
+  };
+
+  char *encoded_data = encode_node_data(data);
+
+  param.message.payload.data = encoded_data;
   param.message.payload.len =
-      strlen(param.message.payload.data);
+      strlen(encoded_data);
+
   param.message_id = sys_rand32_get();
   param.dup_flag = 0U;
   param.retain_flag = 0U;
 
   LOG_INF("Publish topic: %s", MQTT_ESP32_DEMO_PUB_TOPIC);
-  LOG_INF("Publish data: %s", CONFIG_BOARD);
+  LOG_INF("Publish data: %s", encoded_data);
 
   return mqtt_publish(client, &param);
 }
