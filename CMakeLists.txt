@@ -2,7 +2,7 @@
 
 cmake_minimum_required(VERSION 3.20.0)
 
-set(CONF_FILE prj.conf )
+set(CONF_FILE auth.conf prj.conf)
 
 find_package(Zephyr HINTS $ENV{ZEPHYR_BASE})
 project(home-assistant-node-esp32)
