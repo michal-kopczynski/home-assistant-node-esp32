@@ -1,10 +1,10 @@
+#include "wifi.h"
 #include "sensors.h"
 
 #include <logging/log.h>
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 #include <zephyr.h>
-#include <zephyr/types.h>
 #include <data/json.h>
 #include <net/socket.h>
 #include <net/mqtt.h>
@@ -14,14 +14,8 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 #include <drivers/gpio.h>
 
-#include <esp_wifi.h>
 #include <esp_timer.h>
 #include <esp_event.h>
-
-#include <net/net_if.h>
-#include <net/net_core.h>
-#include <net/net_context.h>
-#include <net/net_mgmt.h>
 
 static uint8_t rx_buffer[256];
 static uint8_t tx_buffer[256];
@@ -33,8 +27,6 @@ static struct sockaddr_storage broker;
 static struct zsock_pollfd fds[1];
 static struct net_mgmt_event_callback dhcp_cb;
 static int nfds;
-
-K_SEM_DEFINE(netif_ready, 0, 1);
 
 #define MQTT_POLL_MSEC	500
 #define MQTT_ESP32_BROKER_IP "192.168.1.4"
@@ -380,34 +372,6 @@ static int app_mqtt_process_mqtt(struct mqtt_client *client)
   return 0;
 }
 
-static void handler_cb(struct net_mgmt_event_callback *cb,
-        uint32_t mgmt_event, struct net_if *iface)
-{
-  if (mgmt_event != NET_EVENT_IPV4_DHCP_BOUND) {
-    return;
-  }
-  k_sem_give(&netif_ready);
-}
-
-static void wifi_interface_init(void)
-{
-  struct net_if *iface;
-
-  net_mgmt_init_event_callback(&dhcp_cb, handler_cb,
-             NET_EVENT_IPV4_DHCP_BOUND);
-
-  net_mgmt_add_event_callback(&dhcp_cb);
-
-  iface = net_if_get_default();
-  if (!iface) {
-    LOG_ERR("wifi interface not available");
-    return;
-  }
-
-  net_dhcpv4_start(iface);
-  k_sem_take(&netif_ready, K_FOREVER);
-}
-
 static const struct device* configure_led_device() {
   int ret;
 
@@ -436,7 +400,8 @@ void main(void)
 
   gpio_pin_set(led, PIN, (int)false);
 
-  wifi_interface_init();
+  wifiInit();
+
   app_mqtt_client_init(&client_ctx);
 
   app_mqtt_connect(&client_ctx);
