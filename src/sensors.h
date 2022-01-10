@@ -3,17 +3,17 @@
 
 #include <stdbool.h>
 
-struct sensorsData
+struct SensorsData
 {
   unsigned int pms1_0;
   unsigned int pms2_5;
   unsigned int pms10;
-  unsigned int temperature;
+  int temperature;
   unsigned int humidity;
 };
 
 void initSensors();
 
-bool getSensorsData(struct sensorsData* const data);
+bool getSensorsData(struct SensorsData* const data);
 
 #endif

@@ -1,5 +1,6 @@
 #include "led.h"
 #include "mqtt.h"
+#include "messages.h"
 #include "sensors.h"
 #include "wifi.h"
 
@@ -7,66 +8,11 @@
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 #include <zephyr.h>
-#include <data/json.h>
 
-#include <string.h>
-#include <errno.h>
-
-#define MQTT_PUB_TOPIC "nodes/outside/data"
-#define MQTT_SUB_TOPIC "nodes/outside/set"
+#define MQTT_TOPIC_DATA "nodes/outside/data"
+#define MQTT_TOPIC_SET "nodes/outside/set"
 
 static char buffer[1024];
-
-struct sensors_data
-{
-  const char *pms1_0;
-  const char *pms2_5;
-  const char *pms10;
-  const char *temperature;
-  const char *humidity;
-};
-
-struct node_data
-{
-  const char *location;
-  const char *timestamp;
-  const struct sensors_data sensors;
-};
-
-static const struct json_obj_descr node_data_sensor_descriptor[] = {
-  JSON_OBJ_DESCR_PRIM(struct sensors_data, pms1_0, JSON_TOK_STRING),
-  JSON_OBJ_DESCR_PRIM(struct sensors_data, pms2_5, JSON_TOK_STRING),
-  JSON_OBJ_DESCR_PRIM(struct sensors_data, pms10, JSON_TOK_STRING),
-  JSON_OBJ_DESCR_PRIM(struct sensors_data, temperature, JSON_TOK_STRING),
-  JSON_OBJ_DESCR_PRIM(struct sensors_data, humidity, JSON_TOK_STRING),
-};
-
-static const struct json_obj_descr node_data_descriptor[] = {
-  JSON_OBJ_DESCR_PRIM(struct node_data, location, JSON_TOK_STRING),
-  JSON_OBJ_DESCR_PRIM(struct node_data, timestamp, JSON_TOK_STRING),
-  JSON_OBJ_DESCR_OBJECT(struct node_data, sensors, node_data_sensor_descriptor),
-};
-
-char * encode_node_data(struct node_data response)
-{
-  int ret;
-  ssize_t len;
-
-  len = json_calc_encoded_len(node_data_descriptor, ARRAY_SIZE(node_data_descriptor), &response);
-
-  ret = json_obj_encode_buf(
-    node_data_descriptor,
-    ARRAY_SIZE(node_data_descriptor),
-    &response,
-    buffer,
-    sizeof(buffer));
-
-  // LOG_INF("Encode Return Value: %d", ret);
-
-  // TODO: handle error
-
-  return buffer;
-}
 
 void main(void)
 {
@@ -82,23 +28,41 @@ void main(void)
 
   mqttConnect();
 
-  mqttSubscribe(MQTT_SUB_TOPIC);
+  mqttSubscribe(MQTT_TOPIC_SET);
 
   initSensors();
 
   while(1) {
     mqttProcess();
 
-    struct sensorsData data;
-    if (getSensorsData(&data)) {
-      LOG_INF("Temperature: %u", data.temperature);
+    struct SensorsData sensorsData;
+
+    if (getSensorsData(&sensorsData)) {
+      LOG_INF("Temperature: %u", sensorsData.temperature);
+
+      const struct MessageNodeData nodeData = {
+        .location = "outside",
+        .timestamp = "2021-12-18T20:25:46.537Z",
+        .sensors = {
+          .pms1_0 = sensorsData.pms1_0,
+          .pms2_5 = sensorsData.pms2_5,
+          .pms10 = sensorsData.pms10,
+          .temperature = sensorsData.temperature,
+          .humidity = sensorsData.humidity,
+        }
+      };
+
+      if (messageEncodeNodeData(&nodeData, buffer, sizeof(buffer))) {
+        mqttPublish(MQTT_TOPIC_DATA, buffer);
+      } else {
+        LOG_ERR("Encode JSON failed!");
+      }
+
+      ledSet(ledGreen, true);
+      k_msleep(100);
+      ledSet(ledGreen, false);
     }
 
-    mqttPublish(MQTT_PUB_TOPIC, CONFIG_BOARD);
-
-    ledSet(ledGreen, true);
-    k_msleep(100);
-    ledSet(ledGreen, false);
-    k_msleep(900);
+    k_msleep(1000);
   }
 }

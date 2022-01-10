@@ -14,7 +14,7 @@ struct k_fifo sensorDataFifo;
 
 struct SensorDataFifoItem {
     void *fifo_reserved;   /* 1st word reserved for use by FIFO */
-    struct sensorsData data;
+    struct SensorsData data;
 };
 
 K_THREAD_STACK_DEFINE(sensorsThreadStackArea, STACKSIZE);
@@ -30,6 +30,9 @@ static void sensorsThreadEntry()
   LOG_DBG("SensorsThread started");
   while (1) {
     k_msleep(5000);
+    LOG_DBG("Sensors read");
+
+    // TODO: read sensors
 
     current_thread = k_current_get();
     tname = k_thread_name_get(current_thread);
@@ -38,11 +41,11 @@ static void sensorsThreadEntry()
 
     struct SensorDataFifoItem dataItem;
 
-    dataItem.data.pms1_0 = 21;
-    dataItem.data.pms2_5 = 22;
-    dataItem.data.pms10 = 23;
+    dataItem.data.pms1_0 = 0;
+    dataItem.data.pms2_5 = 0;
+    dataItem.data.pms10 = 0;
     dataItem.data.temperature = cnt++;
-    dataItem.data.humidity = 55;
+    dataItem.data.humidity = 0;
 
     k_fifo_put(&sensorDataFifo, &dataItem);
   }
@@ -60,14 +63,14 @@ void initSensors() {
   k_thread_start(&sensorsThreadData);
 }
 
-bool getSensorsData(struct sensorsData* const data) {
+bool getSensorsData(struct SensorsData* const data) {
   bool dataAvailable = !k_fifo_is_empty(&sensorDataFifo);
 
   if (dataAvailable) {
     LOG_DBG("Sensors data available");
     struct SensorDataFifoItem  *rx_data;
     rx_data = k_fifo_get(&sensorDataFifo, K_NO_WAIT);
-    memcpy(data, &rx_data->data, sizeof(struct sensorsData));
+    memcpy(data, &rx_data->data, sizeof(struct SensorsData));
   }
 
   return dataAvailable;
