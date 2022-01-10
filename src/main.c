@@ -1,3 +1,4 @@
+#include "led.h"
 #include "mqtt.h"
 #include "sensors.h"
 #include "wifi.h"
@@ -10,24 +11,6 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 #include <string.h>
 #include <errno.h>
-
-#include <drivers/gpio.h>
-
-/* The devicetree node identifier for the "led0" alias. */
-#define LED0_NODE DT_ALIAS(led0)
-
-#if DT_NODE_HAS_STATUS(LED0_NODE, okay)
-#define LED0	DT_GPIO_LABEL(LED0_NODE, gpios)
-#define PIN	DT_GPIO_PIN(LED0_NODE, gpios)
-#define FLAGS	DT_GPIO_FLAGS(LED0_NODE, gpios)
-#else
-/* A build error here means your board isn't set up to blink an LED. */
-#error "Unsupported board: led0 devicetree alias is not defined"
-#define LED0	""
-#define PIN	0
-#define FLAGS	0
-#endif
-
 
 #define MQTT_PUB_TOPIC "nodes/outside/data"
 #define MQTT_SUB_TOPIC "nodes/outside/set"
@@ -85,33 +68,15 @@ char * encode_node_data(struct node_data response)
   return buffer;
 }
 
-static const struct device* configure_led_device() {
-  int ret;
-
-  const struct device *dev = device_get_binding(LED0);
-  if (dev == NULL) {
-    LOG_ERR("device_get_binding failed");
-    return NULL;
-  }
-
-  ret = gpio_pin_configure(dev, PIN, GPIO_OUTPUT_ACTIVE | FLAGS);
-  if (ret < 0) {
-    LOG_ERR("gpio_pin_configure failed");
-    return NULL;
-  }
-
-  return dev;
-}
-
 void main(void)
 {
-  const struct device * led = configure_led_device(&led);
-  if(led == NULL) {
-    LOG_ERR("Configuring LED failed!");
+  const struct device * ledGreen = ledInit(LED0);
+  if(ledGreen == NULL) {
+    LOG_ERR("LED init failed!");
     return;
   }
 
-  gpio_pin_set(led, PIN, (int)false);
+  ledSet(ledGreen, false);
 
   wifiInit();
 
@@ -131,9 +96,9 @@ void main(void)
 
     mqttPublish(MQTT_PUB_TOPIC, CONFIG_BOARD);
 
-    gpio_pin_set(led, PIN, (int)true);
+    ledSet(ledGreen, true);
     k_msleep(100);
-    gpio_pin_set(led, PIN, (int)false);
+    ledSet(ledGreen, false);
     k_msleep(900);
   }
 }
